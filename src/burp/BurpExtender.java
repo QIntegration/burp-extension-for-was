@@ -103,7 +103,7 @@ public class BurpExtender
   private JLabel processing;
   private JLabel processingInTab;
   
-  private JTextField pcpURLInTab; // private cloud platform
+  private JTextField pcpURLInTab = new JTextField(25); // private cloud platform
   private JTextField pcpURL;
   private JLabel pcpURLLabelInTab;
   private String qualysPlatformURL;
@@ -461,7 +461,6 @@ public void actionPerformed(ActionEvent e) {
     constraints.gridy = 4;
     pcpURLLabelInTab.setFont(new Font(username_label.getFont().getFamily(), 1, 13));
     pcpURLLabelInTab.setForeground(Color.DARK_GRAY);
-	pcpURLInTab = new JTextField(25);
 	pcpURLLabelInTab.setVisible(false);
 	pcpURLInTab.setVisible(false);
 	
@@ -496,6 +495,10 @@ public void actionPerformed(ActionEvent e) {
     username_label.setFont(new Font(username_label.getFont().getFamily(), 1, 13));
     username_label.setForeground(Color.DARK_GRAY);
     loginPanel.add(username_label, constraints);
+    
+    username_field_tab.setMinimumSize(new Dimension(username_field_tab.getPreferredSize().width-5, username_field_tab.getPreferredSize().height-5 ));
+    password_field_tab.setMinimumSize(new Dimension(password_field_tab.getPreferredSize().width-5, password_field_tab.getPreferredSize().height-5 ));
+    pcpURLInTab.setMinimumSize(new Dimension(pcpURLInTab.getPreferredSize().width-5, pcpURLInTab.getPreferredSize().height-5 ));
     
     constraints.gridx = 1;
     loginPanel.add(username_field_tab, constraints);
