@@ -1,0 +1,12 @@
+Uuid: 3b0105b95e4645a7929faa0cbda1df28
+ExtensionType: 1
+Name: Qualys WAS
+RepoName: qualys-was
+ScreenVersion: 1.0
+SerialVersion: 1
+MinPlatformVersion: 0
+ProOnly: True
+Author: Dave Ferguson, Qualys
+ShortDescription: Provides a way to easily push Burp scanner findings to the Qualys Web Application Scanning (WAS) module.
+EntryPoint: target/Burp_WAS_extension-1.0.0-jar-with-dependencies.jar
+BuildCommand: mvn package -DskipTests=true -Dmaven.javadoc.skip=true -B
