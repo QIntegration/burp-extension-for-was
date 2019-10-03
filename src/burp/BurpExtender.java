@@ -24,22 +24,29 @@ import java.net.URI;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
@@ -47,14 +54,14 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.border.TitledBorder;
-/**
- * The Burp Extension for Qualys WAS.
- * It allows to seamlessly push Burp scanner findings into WAS versus the current 
- * tedious method of exporting an XML file and then importing the file in WAS.
- *
- */
+
+import burp.exception.PayloadInstanceException;
+import burp.exception.UnauthorizedException;
+import burp.model.PayloadInstance;
+import burp.model.WASFinding;
+import burp.model.WebAppItem;
 public class BurpExtender
-  implements IBurpExtender, ITab, IExtensionStateListener, IContextMenuFactory, ActionListener 
+  implements IBurpExtender, ITab, IExtensionStateListener, IContextMenuFactory, ActionListener
 {
   private IBurpExtenderCallbacks callbacks;
   private IScanIssue[] scanIssues = null;
@@ -77,7 +84,9 @@ public class BurpExtender
   private JCheckBox closeIssues;
   
   private List<String> webapplistsLabel = new ArrayList<String>();
-   
+  private List<String> payloadlistsLabel = new ArrayList<String>();
+  private List<String> payloadlistsForWebappsLabel = new ArrayList<String>();
+  private List<String> findingslistLabel = new ArrayList<String>();
   private JScrollPane logPane;
   private static JPanel upperPanel;
   private static JPanel lowerPanel;
@@ -91,8 +100,9 @@ public class BurpExtender
   private JPanel loginPanel;
   private JPanel buttonsPanel;
   private JPanel exportBurpFilePanel;
+  private JPanel importFindingPanel;
       
-  private JFrame frame= new JFrame("Qualys Import Settings");  
+  
   private static JLabel webappid_label = new JLabel("Web App Name (Select the Web application associated with these issues) : ");
  
   private JLabel authenticationLabel = new JLabel();
@@ -110,49 +120,54 @@ public class BurpExtender
   
   private WASSearch wasSearchRequest;
   private ArrayList<WebAppItem> webappLists;
+  private ArrayList<PayloadInstance> payloadInstanceList;
+  private ArrayList<PayloadInstance> payloadInstanceForWebapps;
+  private ArrayList<WASFinding> findingsList;
   
   public static StringBuilder logBuilder = new StringBuilder();
   private SimpleDateFormat time_formatter = new SimpleDateFormat("yyyy-MM-dd_HH:mm:ss.SSS");
   
   private static final String PCP = "Private Cloud Platform";
   
-  private static final String[] QUALYS_Portal_Name_List = { "US Platform 1", "US Platform 2", "US Platform 3", "EU Platform 1", 
-    "EU Platform 2", "India Platform", PCP };
+  private int requestCount = 1;
   
-  private static String searchApiPath = "/qps/rest/3.0/search/was/webapp";
-  private static String importApiPath = "/qps/rest/3.0/import/was/burp";
+  private static final String[] QUALYS_Portal_Name_List = { "US Platform 1", "US Platform 2", "US Platform 3", "US Platform 4", "EU Platform 1", 
+    "EU Platform 2", "Canada Platform", "India Platform", PCP };  
   
-  private static final String[] QUALYS_Portal_Webapp_List = { "https://qualysapi.qualys.com/qps/rest/3.0/search/was/webapp", 
-    "https://qualysapi.qg2.apps.qualys.com/qps/rest/3.0/search/was/webapp", 
-    "https://qualysapi.qg3.apps.qualys.com/qps/rest/3.0/search/was/webapp", 
-    "https://qualysapi.qualys.eu/qps/rest/3.0/search/was/webapp", 
-    "https://qualysapi.qg2.apps.qualys.eu/qps/rest/3.0/search/was/webapp", 
-    "https://qualysapi.qg1.apps.qualys.in/qps/rest/3.0/search/was/webapp",
+  
+  private static final String[] QUALYS_PORTAL_URL = { "https://qualysapi.qualys.com", 
+    "https://qualysapi.qg2.apps.qualys.com", 
+    "https://qualysapi.qg3.apps.qualys.com", 
+    "https://qualysapi.qg4.apps.qualys.com", 
+    "https://qualysapi.qualys.eu", 
+    "https://qualysapi.qg2.apps.qualys.eu",
+    "https://qualysapi.qg1.apps.qualys.ca", 
+    "https://qualysapi.qg1.apps.qualys.in",
     PCP
     };
   
-  private static final String[] QUALYS_Portal_ImportBurp_URL = { "https://qualysapi.qualys.com/qps/rest/3.0/import/was/burp", 
-    "https://qualysapi.qg2.apps.qualys.com/qps/rest/3.0/import/was/burp", 
-    "https://qualysapi.qg3.apps.qualys.com/qps/rest/3.0/import/was/burp", 
-    "https://qualysapi.qualys.eu/qps/rest/3.0/import/was/burp", 
-    "https://qualysapi.qg2.apps.qualys.eu/qps/rest/3.0/import/was/burp", 
-    "https://qualysapi.qg1.apps.qualys.in/qps/rest/3.0/import/was/burp",
-    PCP
-    };
-  
-  
-  private static final String Extension_Name = "Qualys WAS";
-  private static final String Authentication_Fail_Error_Message = "Authentication Failed! Please try again.";
-  private static final String Export_XML_File_Fail_Error_Message = "Export to WAS failed. Please check Logs on the Qualys WAS tab for details.";
-  private static final String Login_Successful_Message = "Credentials Validated Successfully!";
-  private static final String Empty_Login_UserName_InputField_Error_Message = "Error: Username field is empty, request can not be processed";
-  private static final String Empty_Login_Password_InputField_Error_Message = "Error: Password field is empty, request can not be processed";
-  private static final String Empty_Platform_URL_InputField_Error_Message = "Error: Qualys API Server base URL field is empty, request can not be processed";
+  private static final String EXTENSION_NAME = "Qualys WAS";
+  private static final String AUTHENTICATION_FAIL_ERROR_MESSAGE = "Authentication Failed or Unauthorized. Please check logs.";
+  private static final String EXPORT_XML_FILE_FAIL_ERROR_MESSAGE = "Export to WAS failed. Please check Logs on the Qualys WAS tab for details.";
+  private static final String LOGIN_SUCCESSFUL_MESSAGE = "Credentials Validated Successfully!";
+  private static final String EMPTY_LOGIN_USERNAME_INPUTFIELD_ERROR_MESSAGE = "Error: Username field is empty, request can not be processed";
+  private static final String EMPTY_LOGIN_PASSWORD_INPUTFIELD_ERROR_MESSAGE = "Error: Password field is empty, request can not be processed";
+  private static final String EMPTY_PLATFORM_URL_INPUTFIELD_ERROR_MESSAGE = "Error: Qualys API Server base URL field is empty, request can not be processed";
   private static final String PURGE_BURP_ISSUES_TOOLTIP_TEXT = "If option is checked, all previous issues for the web application will be removed before import report issues.\n" + 
 		"Recommended to avoid duplicate findings when you are importing from multiple Burp instances.";
   private static final String CLOSE_EXISTING_ISSUES_TOOLTIP_TEXT = "If option is checked, existing issues not reported in this report will be marked as Fixed.";
-  
-  public BurpExtender() {}
+  private static final String PROCESSING = "Processing...";
+  private static final String WEB_APP_URL_LABEL = "Web App URL : ";
+  private static final String RESOURCES_SPINNER_GIF = "resources/spinner.gif";
+  private static final int MAX_FINDINGS = 100;
+  private static final String SEND_TO_WAS_TITLE = "Qualys WAS Settings";
+  private static final String IMPORT_FROM_WAS_TITLE = "Qualys WAS Import Settings";
+  private JFrame frame= new JFrame(SEND_TO_WAS_TITLE);  
+  private String INVOCATION_CONTEXT = "SendToQualys"; 
+ 
+  public BurpExtender() {
+	  // empty
+  }
   
 public List<JMenuItem> createMenuItems(IContextMenuInvocation invocation) {
 	URL url= this.getClass().getClassLoader().getResource("resources/logo.png");
@@ -162,15 +177,24 @@ public List<JMenuItem> createMenuItems(IContextMenuInvocation invocation) {
 	ArrayList<JMenuItem> menu = new ArrayList<JMenuItem>();
      byte ctx = invocation.getInvocationContext();
      // Only show context menu for scanner results...
+     ImageIcon imageIcon = new ImageIcon(url);
+     Image image = imageIcon.getImage(); // transform it 
+     Image newimg = image.getScaledInstance(13, 20,  java.awt.Image.SCALE_SMOOTH); // scale it the smooth way  
+     imageIcon = new ImageIcon(newimg);  // transform it back
+     
      if (ctx == IContextMenuInvocation.CONTEXT_SCANNER_RESULTS) {
          this.scanIssues = invocation.getSelectedIssues();
-         ImageIcon imageIcon = new ImageIcon(url);
-         Image image = imageIcon.getImage(); // transform it 
-         Image newimg = image.getScaledInstance(13, 20,  java.awt.Image.SCALE_SMOOTH); // scale it the smooth way  
-         imageIcon = new ImageIcon(newimg);  // transform it back
          
          JMenuItem item = new JMenuItem("Send to Qualys WAS", imageIcon);
+         INVOCATION_CONTEXT = "SendToQualys";
          item.addActionListener(this);
+         menu.add(item);
+     }
+     
+     if (ctx == IContextMenuInvocation.CONTEXT_MESSAGE_EDITOR_REQUEST) {
+    	 JMenuItem item = new JMenuItem("Import Qualys WAS Finding", imageIcon);
+    	 item.addActionListener(this);
+    	 INVOCATION_CONTEXT = "ImportFromQualys";
          menu.add(item);
      }
      return menu;
@@ -181,13 +205,18 @@ public void actionPerformed(ActionEvent e) {
 	if (username_login == null || password_login == null) {
 		showLoginWizard();
 	}else {
-		paintNextPageInWizard(webappLists);
+		if(INVOCATION_CONTEXT.equals("SendToQualys")) {
+			paintNextPageInWizard(webappLists);
+		} else if (INVOCATION_CONTEXT.equals("ImportFromQualys")) {
+			paintNextPageInWizardForImportFinding(webappLists);
+			
+		}
 	}
 }
 
  public void showLoginWizard() {
 	    //For context-menu
-	
+	 	frame.setTitle(SEND_TO_WAS_TITLE);
 	 	frame.getContentPane().removeAll();
 		frame.setLayout(new FlowLayout());
 		
@@ -227,7 +256,7 @@ public void actionPerformed(ActionEvent e) {
 	            @Override
 	            public void mouseClicked(MouseEvent e) {
 	                try {
-	                    Desktop.getDesktop().browse(new URI("https://community.qualys.com/docs/DOC-4172"));
+	                    Desktop.getDesktop().browse(new URI("https://www.qualys.com/platform-identification/"));
 	                } catch (Exception ex) {
 	                    //It looks like there's a problem
 	                }
@@ -301,12 +330,12 @@ public void actionPerformed(ActionEvent e) {
 		
 	    constraints.gridx = 0;
 	    constraints.gridy = 8;
-	    URL urlGif= this.getClass().getClassLoader().getResource("resources/spinner.gif");
+	    URL urlGif= this.getClass().getClassLoader().getResource(RESOURCES_SPINNER_GIF);
 		ImageIcon imgiconGif = new ImageIcon(urlGif);
 		Image imgGif = imgiconGif.getImage() ;  
 		 
 		imgiconGif = new ImageIcon( imgGif );	
-	    processing = new JLabel("Processing...", imgiconGif, JLabel.CENTER);
+	    processing = new JLabel(PROCESSING, imgiconGif, JLabel.CENTER);
 	    processing.setVisible(false);
 	    loginPanel.add(processing, constraints);
 	    	    
@@ -333,15 +362,16 @@ public void actionPerformed(ActionEvent e) {
   public void registerExtenderCallbacks(final IBurpExtenderCallbacks callbacks)
   {
     this.callbacks = callbacks;
-    callbacks.setExtensionName(Extension_Name);
+    callbacks.setExtensionName(EXTENSION_NAME);
     callbacks.registerContextMenuFactory(this);
+    
     SwingUtilities.invokeLater(new Runnable()
     {
       public void run()
       {
         splitPane = new JSplitPane(0);
         
-        int dividerLocation_Vertical = new Double(0.65*Toolkit.getDefaultToolkit().getScreenSize().height).intValue();
+        int dividerLocation_Vertical = Double.valueOf(0.65*Toolkit.getDefaultToolkit().getScreenSize().height).intValue();
         
         splitPane.setDividerLocation(dividerLocation_Vertical);
         upperPanel = new JPanel(new GridBagLayout());
@@ -373,7 +403,7 @@ public void actionPerformed(ActionEvent e) {
 
   public String getTabCaption()
   {
-    return Extension_Name;
+    return EXTENSION_NAME;
   }
   
 
@@ -527,12 +557,12 @@ public void actionPerformed(ActionEvent e) {
     
     constraints.anchor = GridBagConstraints.CENTER;
     
-	URL urlGif= this.getClass().getClassLoader().getResource("resources/spinner.gif");
+	URL urlGif= this.getClass().getClassLoader().getResource(RESOURCES_SPINNER_GIF);
 	ImageIcon imgiconGif = new ImageIcon(urlGif);
 	Image imgGif = imgiconGif.getImage() ;  
 	 
 	imgiconGif = new ImageIcon( imgGif );	
-	processingInTab = new JLabel("Processing...", imgiconGif, JLabel.CENTER);
+	processingInTab = new JLabel(PROCESSING, imgiconGif, JLabel.CENTER);
 	
 	
 	constraints.gridx = 0;
@@ -557,7 +587,7 @@ public void actionPerformed(ActionEvent e) {
   
   private void buildConfigPanel() {
 
-	  	
+	  	frame.setTitle(SEND_TO_WAS_TITLE);
 	    frame.setLayout(new GridBagLayout());
 	    exportBurpFilePanel = new JPanel(new GridBagLayout());
 	    exportBurpFilePanel.setPreferredSize(new Dimension(590,400));
@@ -638,9 +668,7 @@ public void actionPerformed(ActionEvent e) {
 	    
 	    webAppURLLabel = new JLabel();
 	    webAppURLLabel.setMinimumSize(webAppURLLabel.getPreferredSize());
-	    webAppURLLabel.setFont(new Font(webappid_label.getFont().getFamily(), 0, 11));
-	    
-	    
+	    webAppURLLabel.setFont(new Font(webappid_label.getFont().getFamily(), 0, 11)); 
 	    
 	    constraints.gridx = 0;
 	    constraints.gridy = 4;
@@ -665,19 +693,19 @@ public void actionPerformed(ActionEvent e) {
 	    closeIssues.setFont(new Font(webappid_label.getFont().getFamily(), 1, 12));
 	    exportBurpFilePanel.add(closeIssues, constraints);
 	        
-	    TitledBorder border = new TitledBorder("Qualys Import Settings");
+	    TitledBorder border = new TitledBorder("Send Burp issues to Qualys WAS");
 	    border.setTitleJustification(TitledBorder.LEFT);
 	    border.setTitlePosition(TitledBorder.TOP);
 	    exportBurpFilePanel.setBorder(border);
 	    
 	    constraints.gridx = 0;
 	    constraints.gridy = 7;
-	    URL urlGif= this.getClass().getClassLoader().getResource("resources/spinner.gif");
+	    URL urlGif= this.getClass().getClassLoader().getResource(RESOURCES_SPINNER_GIF);
   		ImageIcon imgiconGif = new ImageIcon(urlGif);
   		Image imgGif = imgiconGif.getImage() ;  
   		 
   		imgiconGif = new ImageIcon( imgGif );	
-  		processing = new JLabel("Processing...", imgiconGif, JLabel.CENTER);
+  		processing = new JLabel(PROCESSING, imgiconGif, JLabel.CENTER);
   		processing.setVisible(false);
   		exportBurpFilePanel.add(processing, constraints);
 	    
@@ -728,6 +756,319 @@ public void actionPerformed(ActionEvent e) {
   }
   
   
+  // --------   Import WAS Detection Panel components -------------
+  private JPanel findingsRadioPanel;
+  private JRadioButton findingIdRadio;
+  private JRadioButton webappsRadio;
+  private JPanel findingIdPanel;
+  private JLabel findingIdLabel;
+  private JTextField findingIdTextField;
+  private JLabel findingIdRequest;
+  private JComboBox<String> findingIdRequestCombo;
+  
+  private JPanel webappsPanel;
+  private JLabel webappsLabel;
+  private JComboBox<String> webappsCombo;
+  private JLabel findingsLabel;
+  private JComboBox<String> findingsCombo;
+  private JLabel requestPayloadLabel;
+  private JComboBox<String> requestPayloadCombo;
+  private JButton importButton;
+  private JButton fetchButton;
+  private ButtonGroup group;
+  private JLabel processingSpinner;
+  private JLabel findingIdRequestDetails;
+  private JLabel webappsFindingRequestDetails;
+  private JPanel buttonPanel;
+  private ArrayList<String> webappsWithNone = new ArrayList<String>();
+  private ComboboxToolTipRenderer findingsRenderer;
+  private ComboboxToolTipRenderer payloadsRenderer;
+  private ComboboxToolTipRenderer webappsPayloadRenderer;
+  
+  private void initImportWASDetectionPanelComponents() {
+	  
+	  frame.setTitle(IMPORT_FROM_WAS_TITLE);
+	  if (importFindingPanel != null) {
+		  importFindingPanel.repaint();
+		  frame.getContentPane().add(importFindingPanel);
+		  frame.pack();
+		  frame.setLocationRelativeTo(upperPanel);
+		  frame.setVisible(true);
+		  return;
+	  }
+	  
+      findingsRadioPanel = new JPanel();
+      findingIdRadio = new JRadioButton();
+      webappsRadio = new JRadioButton();
+      findingIdPanel = new JPanel();
+      findingIdLabel = new JLabel();
+      findingIdRequestDetails = new JLabel();
+      webappsFindingRequestDetails = new JLabel();
+      findingIdTextField = new JTextField();
+      findingIdRequest = new JLabel();
+      findingIdRequestCombo = new JComboBox<String>();
+      webappsPanel = new JPanel();
+      webappsLabel = new JLabel();
+      webappsCombo = new JComboBox<String>();
+      findingsLabel = new JLabel();
+      findingsCombo = new JComboBox<String>();
+      requestPayloadLabel = new JLabel();
+      requestPayloadCombo = new JComboBox<String>();
+      importButton = new JButton();
+      fetchButton = new JButton();
+      group = new ButtonGroup();
+      buttonPanel = new JPanel();
+     
+      
+      URL urlGif= this.getClass().getClassLoader().getResource(RESOURCES_SPINNER_GIF);
+	  ImageIcon imgiconGif = new ImageIcon(urlGif);
+	  Image imgGif = imgiconGif.getImage() ;  
+		 
+	  imgiconGif = new ImageIcon( imgGif );	
+	  processingSpinner = new JLabel(PROCESSING, imgiconGif, JLabel.CENTER);
+	  processingSpinner.setVisible(false);
+      
+      //======== panel1 ========
+      {
+         
+          TitledBorder findingsBorder = new TitledBorder("Import Options");
+          findingsBorder.setTitleJustification(TitledBorder.LEFT);
+          findingsBorder.setTitlePosition(TitledBorder.TOP);
+  		
+  	      findingsRadioPanel.setBorder(findingsBorder);
+        
+          findingsRadioPanel.setLayout(new GridLayout(2, 2));
+          //---- radioButton2 ----
+          findingIdRadio.setText("Enter Finding ID");
+          findingsRadioPanel.add(findingIdRadio);
+          findingIdRadio.setFont(new Font(findingIdRadio.getFont().getFamily(), 1, 12));
+
+          //---- radioButton3 ----
+          webappsRadio.setText("Select from a Web App's Open Findings");
+          webappsRadio.setFont(new Font(webappsRadio.getFont().getFamily(), 1, 12));
+          group.add(findingIdRadio);
+          group.add(webappsRadio);
+        
+          findingsRadioPanel.add(webappsRadio);
+          
+          findingIdRadio.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				webappsPanel.setVisible(false);
+				findingIdPanel.setVisible(true);
+				
+			}
+		});
+          
+          webappsRadio.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				webappsPanel.setVisible(true);
+				findingIdPanel.setVisible(false);
+			}
+		});
+      }
+
+      
+      //======== panel2 ========
+      {
+          
+          findingIdPanel.setLayout(new GridBagLayout());
+        
+          findingIdLabel.setText("Finding ID :  ");
+          findingIdLabel.setFont(new Font(findingIdLabel.getFont().getFamily(), 1, 12));
+          findingIdPanel.add(findingIdLabel, new GridBagConstraints(0, 1, 1, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 0, 0), 0, 5));
+          findingIdTextField.setFont(new Font(findingIdTextField.getFont().getFamily(), 1, 12));
+          findingIdPanel.add(findingIdTextField, new GridBagConstraints(3, 1, 5, 1, 3.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 0, 0), 0, 5));
+          
+          fetchButton.setText("Fetch");
+          fetchButton.setFont(new Font(fetchButton.getFont().getFamily(), 1, 12));
+          findingIdPanel.add(fetchButton, new GridBagConstraints(8, 1, 2, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 0, 0), 0, 0));
+          
+          findingIdRequestDetails.setText("");
+          findingIdRequestDetails.setFont(new Font(findingIdRequestDetails.getFont().getFamily(), Font.ITALIC, 13));
+          findingIdRequestDetails.setForeground(Color.DARK_GRAY);
+          findingIdPanel.add(findingIdRequestDetails, new GridBagConstraints(0, 2, 11, 2, 0.0, 0.0,
+                  GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+                  new Insets(0, 0, 0, 0), 0, 0));
+          
+          findingIdRequest.setText("Request Payloads :  ");
+          findingIdRequest.setFont(new Font(findingIdRequest.getFont().getFamily(), 1, 12));
+          findingIdPanel.add(findingIdRequest, new GridBagConstraints(0, 4, 2, 1, 0.0, 0.0,
+                  GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+                  new Insets(0, 0, 0, 0), 0, 0));
+          findingIdPanel.add(findingIdRequestCombo, new GridBagConstraints(3, 4, 8, 1, 0.0, 0.0,
+                  GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+                  new Insets(0, 0, 0, 0), 0, 0));
+          findingIdRequestCombo.setFont(new Font(findingIdRequestCombo.getFont().getFamily(), 1, 12));
+          payloadsRenderer = new ComboboxToolTipRenderer();
+          findingIdRequestCombo.setRenderer(payloadsRenderer);
+          
+          
+          findingIdRequest.setVisible(false);
+          findingIdRequestCombo.setVisible(false);
+          findingIdRadio.setSelected(true);
+          
+          findingIdPanel.add(processingSpinner, new GridBagConstraints(3, 4, 5, 1, 0.0, 0.0,
+                  GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+                  new Insets(0, 0, 0, 0), 0, 0));
+          
+          fetchButton.addActionListener(new GetFindingDetailsActionListener());
+          
+      }
+
+      //======== panel3 ========
+      {
+          webappsPanel.setLayout(new GridBagLayout());
+         
+
+          //---- Combo 1 ----
+          webappsLabel.setText("Web Apps : ");
+          webappsLabel.setFont(new Font(webappsLabel.getFont().getFamily(), 1, 12));
+          webappsPanel.add(webappsLabel, new GridBagConstraints(0, 0, 2, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 2, 2), 0, 2));
+          webappsPanel.add(webappsCombo, new GridBagConstraints(3, 0, 1, 1, 3.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 2, 0), 0, 2));
+          webappsCombo.setFont(new Font(webappsCombo.getFont().getFamily(), 1, 12));
+          
+          webappsWithNone.clear();
+          webappsWithNone.add(0, "--- Select a web app ---");
+          for (int counter = 0; counter < webappLists.size(); counter++) {
+              WebAppItem webappItem = (WebAppItem)webappLists.get(counter);
+              String webappName = webappItem.getWebAppItem_Name();
+              webappsWithNone.add(webappName);
+          }
+          DefaultComboBoxModel<String> webList_model = new DefaultComboBoxModel<String>(webappsWithNone.toArray(new String[0]));
+          webappsCombo.setModel(webList_model);
+          webappsCombo.addActionListener(new WebAppFindingsActionListener());
+          
+          
+          
+          //---- Combo 2 ----
+          findingsLabel.setText("Findings : ");
+          findingsLabel.setFont(new Font(findingsLabel.getFont().getFamily(), 1, 12));
+          webappsPanel.add(findingsLabel, new GridBagConstraints(0, 2, 1, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 2, 2), 0, 2));
+          webappsPanel.add(findingsCombo, new GridBagConstraints(3, 2, 1, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 2, 0), 0, 2));
+          findingsCombo.setFont(new Font(findingsCombo.getFont().getFamily(), 1, 12));
+          findingsCombo.addActionListener(new GetFindingDetailsActionListener());
+          findingsRenderer = new ComboboxToolTipRenderer();
+          findingsCombo.setRenderer(findingsRenderer);
+          
+          //---- Combo 3 ----
+          
+          webappsFindingRequestDetails.setText("");
+          webappsFindingRequestDetails.setFont(new Font(webappsFindingRequestDetails.getFont().getFamily(), Font.ITALIC, 13));
+          webappsFindingRequestDetails.setForeground(Color.DARK_GRAY);
+          webappsPanel.add(webappsFindingRequestDetails, new GridBagConstraints(0, 4, 5, 2, 0.0, 0.0,
+                  GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+                  new Insets(0, 0, 0, 2), 0, 2));
+          
+          
+          requestPayloadLabel.setText("Request Payloads : ");
+          requestPayloadLabel.setFont(new Font(requestPayloadLabel.getFont().getFamily(), 1, 12));
+          webappsPanel.add(requestPayloadLabel, new GridBagConstraints(0, 6, 1, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 0, 2), 0, 2));
+          webappsPanel.add(requestPayloadCombo, new GridBagConstraints(3, 6, 1, 1, 0.0, 0.0,
+              GridBagConstraints.CENTER, GridBagConstraints.BOTH,
+              new Insets(0, 0, 0, 0), 0, 2));
+          requestPayloadCombo.setFont(new Font(requestPayloadCombo.getFont().getFamily(), 1, 12));
+          webappsPayloadRenderer = new ComboboxToolTipRenderer();
+          requestPayloadCombo.setRenderer(webappsPayloadRenderer);
+          
+          requestPayloadLabel.setVisible(false);
+          requestPayloadCombo.setVisible(false);
+          webappsPanel.setVisible(false);
+      }
+
+	  {
+		  //---- Import  button ----
+		  buttonPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 7, 7));
+	      importButton.setText("Import Request");
+	      importButton.setFont(new Font(importButton.getFont().getFamily(), 1, 12));
+	      importButton.addActionListener(new ImportWASDetectionListener());
+	      buttonPanel.add(importButton);
+      
+	      // ------ Close button ----
+	      JButton closeButton = new JButton("Close");
+		  closeButton.setFont(new Font(closeButton.getFont().getFamily(), 1, 12));
+		  closeButton.addActionListener(new ActionListener() {
+			  public void actionPerformed(ActionEvent e)
+			  {
+			       frame.dispose();
+			  }
+		  });
+		  buttonPanel.add(closeButton);
+	  }
+      
+      frame.setLayout(new FlowLayout(FlowLayout.LEFT));
+      importFindingPanel = new JPanel();
+      importFindingPanel.setLayout(new BoxLayout(importFindingPanel, BoxLayout.Y_AXIS));
+      importFindingPanel.setPreferredSize(new Dimension(590, 400));  
+	  
+      TitledBorder findingsBorder = new TitledBorder("importFindingPanel");
+      findingsBorder.setTitleJustification(TitledBorder.LEFT);
+      findingsBorder.setTitlePosition(TitledBorder.TOP);
+		
+      /*findingsRadioPanel.setPreferredSize(new Dimension(150, 100));
+      findingIdPanel.setPreferredSize(new Dimension(200, 100));
+      webappsPanel.setPreferredSize(new Dimension(200, 150));*/
+      
+      findingsRadioPanel.setMaximumSize(new Dimension(450, 100));
+      findingIdPanel.setMaximumSize(new Dimension(450, 200));
+      webappsPanel.setMaximumSize(new Dimension(450, 220));
+      buttonPanel.setMaximumSize(new Dimension(450, 70));
+      
+      importFindingPanel.add(findingsRadioPanel);
+      importFindingPanel.add(findingIdPanel);
+      importFindingPanel.add(webappsPanel);
+      importFindingPanel.add(processingSpinner);
+      importFindingPanel.add(buttonPanel);
+	
+	  importFindingPanel.repaint();
+	  frame.getContentPane().add(importFindingPanel);
+	  frame.pack();
+	  frame.setLocationRelativeTo(upperPanel);
+	  frame.setVisible(true);
+	  
+  }
+  
+  
+  public class ComboboxToolTipRenderer extends DefaultListCellRenderer {
+	    List<String> tooltips;
+
+	    @Override
+	    public Component getListCellRendererComponent(JList list, Object value,
+	                        int index, boolean isSelected, boolean cellHasFocus) {
+
+	        JComponent comp = (JComponent) super.getListCellRendererComponent(list,
+	                value, index, isSelected, cellHasFocus);
+
+	        if (-1 < index && null != value && null != tooltips) {
+	            list.setToolTipText(tooltips.get(index));
+	        }
+	        return comp;
+	    }
+
+	    public void setTooltips(List<String> tooltips) {
+	        this.tooltips = tooltips;
+	    }
+	}
+  
   private void refreshWebAppsList() {
 	  if (wasSearchRequest == null ) {
 		  logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Cannot initiate the request... Please Validate the credentials again. \n");
@@ -763,7 +1104,7 @@ public void actionPerformed(ActionEvent e) {
 		      }
 		      paintNextPageInWizard(webappLists);
 		      WebAppItem webAppItem = webappLists.get(0);  // by default first item selected after refresh
-		      webAppURLLabel.setText("Web App URL : " + webAppItem.getWebAppItem_URL());
+		      webAppURLLabel.setText(WEB_APP_URL_LABEL + webAppItem.getWebAppItem_URL());
 		      
 		    } catch (InterruptedException e) {
 		    	 logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Error occurred refreshing webapps; " + e.getMessage() + "\n");
@@ -775,9 +1116,9 @@ public void actionPerformed(ActionEvent e) {
 		   }
 
 		   @Override
-		   // Can safely update the GUI from this method.
-		   protected void process(List<Integer> chunks) {
 		   
+		   protected void process(List<Integer> chunks) {
+			   // Can safely update the GUI from this method.
 		   }		   
 		  };
 		  
@@ -809,18 +1150,32 @@ public void actionPerformed(ActionEvent e) {
 	public void actionPerformed(ActionEvent e) {
 		if (webapplication_list_combox.getSelectedIndex() != -1) {
 			 WebAppItem webAppItem = webappLists.get(webapplication_list_combox.getSelectedIndex());
-			 webAppURLLabel.setText("Web App URL : " + webAppItem.getWebAppItem_URL());
+			 webAppURLLabel.setText(WEB_APP_URL_LABEL + webAppItem.getWebAppItem_URL());
 		}
 	}
 	});
     
     WebAppItem webAppItem = webappLists.get(webapplication_list_combox.getSelectedIndex());
-    webAppURLLabel.setText("Web App URL : " + webAppItem.getWebAppItem_URL()); 
+    webAppURLLabel.setText(WEB_APP_URL_LABEL + webAppItem.getWebAppItem_URL()); 
     
     frame.getContentPane().add(exportBurpFilePanel);
     frame.getContentPane().repaint();
   }
 
+  
+  public void paintNextPageInWizardForImportFinding(ArrayList<WebAppItem> webappLists)
+  {
+	  if (webappLists == null) {
+		  return;
+	  }
+    frame.getContentPane().removeAll();
+    
+    initImportWASDetectionPanelComponents();
+    
+    frame.getContentPane().add(importFindingPanel);
+    frame.getContentPane().repaint();
+  }
+  
   private String parseIHTTPService(IScanIssue issue)
   {
     IHttpService ihttpService = issue.getHttpService();
@@ -830,9 +1185,232 @@ public void actionPerformed(ActionEvent e) {
     int http_port = ihttpService.getPort();
     if ((http_port == 80) || (http_port == 443)) {
       http_site_map_root = http_protocol + "://" + http_host + "/";
-    } else
-      http_site_map_root = http_protocol + "://" + http_host + ":" + http_port + "/";
+    } else {
+    	http_site_map_root = http_protocol + "://" + http_host + ":" + http_port + "/";
+    }
     return http_site_map_root;
+  }
+  
+  
+  
+  public class GetFindingDetailsActionListener implements ActionListener
+  {
+	  public GetFindingDetailsActionListener() {}
+
+	@Override
+	public void actionPerformed(ActionEvent e) {
+
+     	SwingWorker<String, Integer> worker = new SwingWorker<String, Integer>() {
+
+			@Override
+			protected String doInBackground() throws Exception {
+				
+				if (findingIdRadio.isSelected()) {
+					String findingId = findingIdTextField.getText().trim();
+					processingSpinner.setVisible(true);
+					DefaultComboBoxModel<String> empty_model = new DefaultComboBoxModel<String>();
+					findingIdRequestCombo.setModel(empty_model);   //empty the next drop down before painting the api response
+					findingIdRequest.setVisible(false);
+					findingIdRequestCombo.setVisible(false);
+					findingIdRequestDetails.setText("");
+					return wasSearchRequest.getFindingDetails(findingId);
+				} else if (webappsRadio.isSelected()) {
+					int index = findingsCombo.getSelectedIndex();
+					if (index > 0) {
+						WASFinding finding = findingsList.get(index-1);  //index-1 because first entry is ---select--- entry
+						processingSpinner.setVisible(true);
+						DefaultComboBoxModel<String> empty_model = new DefaultComboBoxModel<String>();
+						requestPayloadCombo.setModel(empty_model);
+						requestPayloadLabel.setVisible(false);
+						requestPayloadCombo.setVisible(false);
+						webappsFindingRequestDetails.setText("");
+					    return wasSearchRequest.getFindingDetails(finding.getFindingId());
+					}
+				}
+				return null;
+				
+			}
+     		
+			 protected void done() {
+				 try {
+					 
+					if (findingIdRadio.isSelected()) {
+						String response = get();
+						payloadlistsLabel.clear();
+						processingSpinner.setVisible(false);
+						try {
+							payloadInstanceList = wasSearchRequest.parsePayloadInstance(response);
+						} catch(PayloadInstanceException e) {
+							JOptionPane.showMessageDialog(frame, "Unable to import finding. Only finding type of QUALYS is supported", "Import Error", JOptionPane.ERROR_MESSAGE);
+							if (payloadInstanceList != null) {
+								payloadInstanceList.clear();
+							}
+							return;
+						} catch (UnauthorizedException e) {
+							findingIdRequestDetails.setText(e.getMessage());
+							if (payloadInstanceList != null) {
+								payloadInstanceList.clear();
+							}
+							return;
+						}
+						
+						int payloadSize = payloadInstanceList.size();
+						logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " Payload instances :" + payloadSize + "\n");
+						logTextArea.setText(logBuilder.toString());
+						
+						if (payloadSize == 0) {
+							findingIdRequestDetails.setText("No Payload instance found for this Finding ID.");
+						}
+						
+						if (payloadSize > 0) {
+							PayloadInstance firstPayloadInstance = payloadInstanceList.get(0);
+							String staticText = String.format("<html><br> QID  %s  -  %s <br> %s  %s <br<br> </html>" , firstPayloadInstance.getQid(),
+									firstPayloadInstance.getName(), firstPayloadInstance.getMethod(), firstPayloadInstance.getLink());
+							findingIdRequestDetails.setText(staticText);
+						}
+						
+						if (payloadSize > 1) {
+							for (PayloadInstance p : payloadInstanceList) {
+								URL url = new URL(p.getLink());
+								if (p.getMethod().equalsIgnoreCase("POST")) {
+									//check for payload first, if its missing or N/A then use url query, if query is null, use url path to populate
+									payloadlistsLabel.add((p.getPayload().equalsIgnoreCase("N/A")||p.getPayload().isEmpty()) ? (url.getQuery() == null ? url.getPath() : url.getQuery()) : p.getPayload());
+								} else if(p.getMethod().equalsIgnoreCase("GET")) {
+									payloadlistsLabel.add(url.getQuery() == null ? url.getPath() : url.getQuery());
+								}
+							}
+							
+							payloadlistsLabel.add(0, "--- Select the Request Payload ---");
+							DefaultComboBoxModel<String> payloadInstance_model = new DefaultComboBoxModel<String>(payloadlistsLabel.toArray(new String[0]));
+							findingIdRequestCombo.setModel(payloadInstance_model);
+							payloadsRenderer.setTooltips(payloadlistsLabel);
+							findingIdRequest.setVisible(true);
+							findingIdRequestCombo.setVisible(true);
+							findingIdRequestCombo.repaint();
+						} 
+					
+					} else if (webappsRadio.isSelected()) {
+						String response = get();
+						payloadlistsForWebappsLabel.clear();
+						processingSpinner.setVisible(false);
+						payloadInstanceForWebapps = wasSearchRequest.parsePayloadInstance(response);
+						
+						int payloadSizeForWebapps = payloadInstanceForWebapps.size();
+						logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " Payload instances : " + payloadSizeForWebapps + "\n");
+						logTextArea.setText(logBuilder.toString());
+						
+						if (payloadSizeForWebapps == 0) {
+							webappsFindingRequestDetails.setText("No Payload instance found for this Finding ID.");
+						}
+						
+						if (payloadSizeForWebapps > 0) {
+							PayloadInstance firstPayloadInstance = payloadInstanceForWebapps.get(0);
+							String staticText = String.format("<html><br> QID  %s  -  %s <br> %s  %s <br<br> </html>" , firstPayloadInstance.getQid(),
+									firstPayloadInstance.getName(), firstPayloadInstance.getMethod(), firstPayloadInstance.getLink());
+							webappsFindingRequestDetails.setText(staticText);
+						}
+						
+						if (payloadSizeForWebapps > 1) {
+							for (PayloadInstance p : payloadInstanceForWebapps) {
+								URL url = new URL(p.getLink());
+								if (p.getMethod().equalsIgnoreCase("POST")) {
+									payloadlistsForWebappsLabel.add((p.getPayload().equalsIgnoreCase("N/A")||p.getPayload().isEmpty()) ? (url.getQuery() == null ? url.getPath() : url.getQuery()) : p.getPayload());
+								} else if(p.getMethod().equalsIgnoreCase("GET")) {
+									payloadlistsForWebappsLabel.add(url.getQuery() == null ? url.getPath() : url.getQuery());
+								}
+							}
+							
+							payloadlistsForWebappsLabel.add(0, "--- Select the Request Payload ---");
+							DefaultComboBoxModel<String> payloadInstance_model = new DefaultComboBoxModel<String>(payloadlistsForWebappsLabel.toArray(new String[0]));
+							requestPayloadCombo.setModel(payloadInstance_model);
+							webappsPayloadRenderer.setTooltips(payloadlistsForWebappsLabel);
+							requestPayloadLabel.setVisible(true);
+							requestPayloadCombo.setVisible(true);
+							requestPayloadCombo.repaint();
+						} 
+					}
+					
+					
+				 } catch (Exception e) {
+					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception parsing payloadInstances : " + e.getMessage() + "\n");
+					logTextArea.setText(logBuilder.toString());
+				}
+				 
+			 }
+     	};
+     	worker.execute();
+	
+	}
+	  
+  }
+  
+  public class WebAppFindingsActionListener implements ActionListener {
+
+	@Override
+	public void actionPerformed(ActionEvent e) {
+		SwingWorker<String, Integer> worker = new SwingWorker<String, Integer>() {
+
+			@Override
+			protected String doInBackground() throws Exception {
+				int index = webappsCombo.getSelectedIndex();
+				processingSpinner.setVisible(true);
+				DefaultComboBoxModel<String> empty_model = new DefaultComboBoxModel<String>();
+				findingsCombo.setModel(empty_model);
+				requestPayloadCombo.setModel(empty_model);
+				requestPayloadCombo.setVisible(false);
+				requestPayloadLabel.setVisible(false);
+				webappsFindingRequestDetails.setText("");
+				if (index > 0) {
+					WebAppItem webAppItem = webappLists.get(index-1);
+				    return wasSearchRequest.searchFindings(webAppItem.getWebAppItem_ID());
+				}
+				return null;
+			}
+			
+			 protected void done() {
+				 try {
+					String response = get();
+					processingSpinner.setVisible(false);
+					findingsList = wasSearchRequest.parseFindings(response);
+					
+					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " Total number of findings in this API response : " + findingsList.size() + "\n");
+					logTextArea.setText(logBuilder.toString());
+					
+					findingslistLabel.clear();
+					
+					if (findingsList.size() == 0 ) {
+						webappsFindingRequestDetails.setText("No findings are available for the selected web app.");
+						return;
+					}
+					
+					for (WASFinding p : findingsList) {
+						findingslistLabel.add(p.toString());
+					}
+					
+					findingslistLabel.add(0, "--- Select the Finding ---");
+					DefaultComboBoxModel<String> finding_model = new DefaultComboBoxModel<String>(findingslistLabel.toArray(new String[0]));
+				    findingsCombo.setModel(finding_model);
+				    findingsRenderer.setTooltips(findingslistLabel);
+				    processingSpinner.setVisible(false);
+				    findingsCombo.repaint();
+				    
+				    if (findingsList.size() == MAX_FINDINGS) {
+				    	if (wasSearchRequest.hasMoreRecords(response)) {
+				    		webappsFindingRequestDetails.setText("<html>NOTE: More than 100 open findings were found for this web app.<br> Only 100 are listed here. You can enter finding ID as an alternative.</html>");
+				    	}
+				    }
+				    
+				} catch (Exception e) {
+					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception parsing WAS findings : " + e.getMessage() + "\n");
+					logTextArea.setText(logBuilder.toString());
+				} 
+				 
+			 }
+		};
+		worker.execute();
+	}
+	  
+	
   }
   
   public class ExportFileButtonActionListener implements ActionListener
@@ -871,10 +1449,10 @@ public void actionPerformed(ActionEvent e) {
     			  String webappID = selectedWebAppItem.getWebAppItem_ID();
     		      long webapp_id = Long.parseLong(webappID);
     		    
-    		      if(QUALYS_Portal_ImportBurp_URL[portalSelectedIndex].equals(PCP)) {
-    		    	  importBurpURL = processPlatformURL(qualysPlatformURL) + importApiPath;
+    		      if(QUALYS_PORTAL_URL[portalSelectedIndex].equals(PCP)) {
+    		    	  importBurpURL = processPlatformURL(qualysPlatformURL);
     		      }else {
-    		    	  importBurpURL = BurpExtender.QUALYS_Portal_ImportBurp_URL[portalSelectedIndex];
+    		    	  importBurpURL = BurpExtender.QUALYS_PORTAL_URL[portalSelectedIndex];
     		      }
 				
 				
@@ -885,7 +1463,7 @@ public void actionPerformed(ActionEvent e) {
 					try {
 					scanreportXMLTempFile = File.createTempFile(fileName, ".xml");
 					scanreportXMLTempFile.deleteOnExit();
-					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Making import API call in Qualys WAS \n");
+					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Making API call to send Burp issue(s) into Qualys WAS \n");
 					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Temp file On Default Location: " + scanreportXMLTempFile.getAbsolutePath() + "\n");
 					logTextArea.setText(logBuilder.toString());
 				} catch (IOException e1) {
@@ -894,7 +1472,7 @@ public void actionPerformed(ActionEvent e) {
 				}
 					
 				try {
-				  if (scanreportXMLTempFile.exists()) {
+				  if (scanreportXMLTempFile != null && scanreportXMLTempFile.exists()) {
 				    callbacks.generateScanReport("xml", scanIssues, scanreportXMLTempFile);
 				     				    
 				    wasImportRequest = new WASImport(scanreportXMLTempFile, webapp_id, username_login, String.valueOf(password_login), callbacks, importBurpURL, purgeIssues.isSelected(), closeIssues.isSelected());
@@ -918,7 +1496,7 @@ public void actionPerformed(ActionEvent e) {
     		     // Retrieve the return value of doInBackground.
     		    	response = get();
     		    	
-    		    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Import API Response = " + response + "\n");
+    		    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Send to Qualys WAS API Response = " + response + "\n");
     				logTextArea.setText(logBuilder.toString());
     		    	
     		    	 if (wasImportRequest.checkExportStatus(response)) {
@@ -954,7 +1532,7 @@ public void actionPerformed(ActionEvent e) {
     				    	processing.setVisible(false);
     				    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : " + response + "\n");
     						logTextArea.setText(logBuilder.toString());
-    						exportStatusLabel.setText(Export_XML_File_Fail_Error_Message);
+    						exportStatusLabel.setText(EXPORT_XML_FILE_FAIL_ERROR_MESSAGE);
     						exportStatusLabel.setForeground(Color.red);
     						exportStatusLabel.setFont(new Font("Courier New", 1, 12));
     						exportStatusLabel.setVisible(true);
@@ -991,6 +1569,89 @@ public void actionPerformed(ActionEvent e) {
 	return apiURL;
   }
   
+  
+  
+  public class ImportWASDetectionListener implements ActionListener {
+
+	@Override
+	public void actionPerformed(ActionEvent e) {
+		SwingWorker<String, Integer> worker = new SwingWorker<String, Integer>() {
+
+			@Override
+			protected String doInBackground() throws Exception {
+				
+				return "";
+			}
+			
+			protected void done() {
+				try {
+					if (findingIdRadio.isSelected()) {
+						if (payloadInstanceList == null) {
+							JOptionPane.showMessageDialog(frame, "Please fetch the Finding ID details first by clicking the 'Fetch' button.", "Fetch Finding Details", JOptionPane.WARNING_MESSAGE);
+							return;
+						}
+						
+						int size = payloadInstanceList.size();
+						if (size == 1) {
+							PayloadInstance instance = payloadInstanceList.get(0);
+							sendToRepeater(instance);
+						} else if (size > 1){
+							int index = findingIdRequestCombo.getSelectedIndex();
+							PayloadInstance instance = index == 0 ? payloadInstanceList.get(0) : payloadInstanceList.get(index-1);
+							sendToRepeater(instance);
+						}
+						
+					} else if (webappsRadio.isSelected()) {
+						
+						if (findingsList == null || findingsList.size() == 0) {  // if findings are only empty
+							frame.dispose();
+							return;
+						}
+						
+						int size = payloadInstanceForWebapps.size();
+						if (size == 1) {
+							PayloadInstance instance = payloadInstanceForWebapps.get(0);
+							sendToRepeater(instance);
+						} else if (size > 1){
+							int index = requestPayloadCombo.getSelectedIndex();
+							PayloadInstance instance = index == 0 ? payloadInstanceForWebapps.get(0) : payloadInstanceForWebapps.get(index-1);
+							sendToRepeater(instance);
+						}
+						
+					}
+					frame.dispose();
+				} catch(Exception e) {
+					logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " Exception processing payload instances; Exception: " + e.getMessage() + "\n");
+			 		logTextArea.setText(logBuilder.toString());
+				}
+			}
+			
+			private void sendToRepeater(PayloadInstance instance) throws Exception {
+				URL url = null;
+				url = new URL(instance.getLink());
+				boolean isHttps = url.getProtocol().equalsIgnoreCase("https");
+				int port = 80;
+				port = url.getPort() != -1 ? url.getPort() : (isHttps ? 443 :80);
+				
+				String firstLine = instance.getMethod() + " " + instance.getLink() + " HTTP/1.1";
+				String base64Headers = instance.getHeaders();
+				String headers = base64Headers.isEmpty() || base64Headers == null ? "" : new String(Base64.getDecoder().decode(instance.getHeaders()));
+				String base64Body = instance.getBody();
+				String body = base64Body.isEmpty() || base64Body == null || base64Body.equalsIgnoreCase("null") ? "" : new String(Base64.getDecoder().decode(instance.getBody()));
+				String payload = "";
+				if (headers.contains("Host: ")) {
+					payload = firstLine + "\n" + headers + "\n" + body;
+				} else {
+					payload = firstLine + "\n" + "Host: " + url.getHost() + "\n" + headers + "\n" + body;
+				}
+				
+				callbacks.sendToRepeater(url.getHost(), port, isHttps, payload.getBytes(), "WAS Request " + requestCount++);
+			}
+		};
+		worker.execute();
+	}
+  }
+  
   public class ValidateCredsActionListener implements ActionListener
   {
 	private boolean isCredsValidationThroughWizard;
@@ -1024,10 +1685,10 @@ public void actionPerformed(ActionEvent e) {
 				  authenticationLabel.setVisible(false);
 				  authenticationLabelInTab.setVisible(false);
 			      if ((user.getText() == null) || (user.getText().trim().isEmpty()) || (user.getText().trim().equals(""))) {
-			        JOptionPane.showMessageDialog(upperPanel, Empty_Login_UserName_InputField_Error_Message, "Error Message", 0);
+			        JOptionPane.showMessageDialog(upperPanel, EMPTY_LOGIN_USERNAME_INPUTFIELD_ERROR_MESSAGE, "Error Message", 0);
 			      }
 			      else if ((pass.getPassword() == null) || (pass.getPassword().length == 0)) {
-			        JOptionPane.showMessageDialog(upperPanel, Empty_Login_Password_InputField_Error_Message, "Error Message", 0);
+			        JOptionPane.showMessageDialog(upperPanel, EMPTY_LOGIN_PASSWORD_INPUTFIELD_ERROR_MESSAGE, "Error Message", 0);
 			      } else {
 			    	  if (isCredsValidationThroughWizard) {
 			    		  processing.setVisible(true);
@@ -1047,16 +1708,14 @@ public void actionPerformed(ActionEvent e) {
 								qualysPlatformURL = pcpURLInTab.getText().trim();
 							}
 							if(qualysPlatformURL == null || (qualysPlatformURL.trim().isEmpty()) ){
-								JOptionPane.showMessageDialog(upperPanel, Empty_Platform_URL_InputField_Error_Message, "Error Message", 0);
+								JOptionPane.showMessageDialog(upperPanel, EMPTY_PLATFORM_URL_INPUTFIELD_ERROR_MESSAGE, "Error Message", 0);
 								return "";
 							}
-							searchWebappsURL = processPlatformURL(qualysPlatformURL) + searchApiPath;
+							searchWebappsURL = processPlatformURL(qualysPlatformURL);
 						} else {
-							searchWebappsURL = QUALYS_Portal_Webapp_List[qualys_URI.getSelectedIndex()];
+							searchWebappsURL = QUALYS_PORTAL_URL[qualys_URI.getSelectedIndex()];
 						}
 					}
-			        
-			        
 			        wasSearchRequest = new WASSearch(searchWebappsURL, username_login, String.valueOf(password_login), callbacks);
 			        return wasSearchRequest.getWebApplicationList();
 			   }
@@ -1072,12 +1731,17 @@ public void actionPerformed(ActionEvent e) {
 			     response = get();
 			     if (wasSearchRequest.checkAuthenticationStatus(response)) {
 			          webappLists = wasSearchRequest.parseWebApplications(response);  
-			          logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : " + Login_Successful_Message +  "\n");
+			          logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : " + LOGIN_SUCCESSFUL_MESSAGE +  "\n");
 		      		  logTextArea.setText(logBuilder.toString());
 		      		  
 		      		  if (isCredsValidationThroughWizard) {
 		      			  processing.setVisible(false);
-			              paintNextPageInWizard(webappLists);
+		      			  
+		      			if(INVOCATION_CONTEXT.equals("SendToQualys")) {
+		      				paintNextPageInWizard(webappLists);
+		      			} else if (INVOCATION_CONTEXT.equals("ImportFromQualys")) {
+		      				paintNextPageInWizardForImportFinding(webappLists);
+		      			}
 			              //fill in the username and password in tab menu automatically
 			              username_field_tab.setText(username_login); 		
 			              password_field_tab.setText(String.valueOf(password_login));
@@ -1090,7 +1754,7 @@ public void actionPerformed(ActionEvent e) {
 			              
 			          } else {
 			        	  processingInTab.setVisible(false);
-			        	  authenticationLabelInTab.setText(Login_Successful_Message);
+			        	  authenticationLabelInTab.setText(LOGIN_SUCCESSFUL_MESSAGE);
 			              authenticationLabelInTab.setVisible(true);
 			              authenticationLabelInTab.setFont(new Font("Courier New", 1, 12));
 			              authenticationLabelInTab.setForeground(Color.blue);
@@ -1098,18 +1762,16 @@ public void actionPerformed(ActionEvent e) {
 			        } else {
 			    	  username_login = null;
 			          password_login = null;
-			          logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : " + Authentication_Fail_Error_Message + "\n");
-		      		  logTextArea.setText(logBuilder.toString());
 		      		  
 			          if (isCredsValidationThroughWizard) {
 			        	  processing.setVisible(false);
-			        	  authenticationLabel.setText(Authentication_Fail_Error_Message);
+			        	  authenticationLabel.setText(AUTHENTICATION_FAIL_ERROR_MESSAGE);
 			              authenticationLabel.setVisible(true);
 			              authenticationLabel.setFont(new Font("Courier New", 1, 12));
 			              authenticationLabel.setForeground(Color.red);
 			          } else {
 			        	  processingInTab.setVisible(false);
-			        	  authenticationLabelInTab.setText(Authentication_Fail_Error_Message);
+			        	  authenticationLabelInTab.setText(AUTHENTICATION_FAIL_ERROR_MESSAGE);
 			              authenticationLabelInTab.setVisible(true);
 			              authenticationLabelInTab.setFont(new Font("Courier New", 1, 12));
 			              authenticationLabelInTab.setForeground(Color.red);
@@ -1117,8 +1779,36 @@ public void actionPerformed(ActionEvent e) {
 			          }         
 			        }
 			        
-			        logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " :  Response data: \n" + response + "\n");
-					logTextArea.setText(logBuilder.toString());
+					// Update the components in Import WAS Detection flow.
+					webappsWithNone.clear();
+				    webappsWithNone.add(0, "--- Select a web app ---");
+			        for (int counter = 0; counter < webappLists.size(); counter++) {
+			            WebAppItem webappItem = (WebAppItem)webappLists.get(counter);
+			            String webappName = webappItem.getWebAppItem_Name();
+			            webappsWithNone.add(webappName);
+			        }
+			        DefaultComboBoxModel<String> webList_model = new DefaultComboBoxModel<String>(webappsWithNone.toArray(new String[0]));
+			        webappsCombo.setModel(webList_model);
+			        DefaultComboBoxModel<String> empty_model = new DefaultComboBoxModel<String>();
+					findingsCombo.setModel(empty_model);
+					requestPayloadCombo.setModel(empty_model);
+					webappsPanel.repaint();
+					
+					findingIdTextField.setText("");
+					findingIdRequestDetails.setText("");
+					findingIdRequestCombo.setModel(empty_model);
+					findingIdRequestCombo.setVisible(false);
+					findingIdRequest.setVisible(false);
+					findingIdPanel.repaint();
+					
+					requestPayloadLabel.setVisible(false);
+					requestPayloadCombo.setVisible(false);
+					webappsFindingRequestDetails.setText("");
+					
+					findingIdRadio.setSelected(true);
+					findingIdPanel.setVisible(true);
+					webappsPanel.setVisible(false);
+					
 			    } catch (InterruptedException e) {
 			    	 logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Error occurred fetching webapps; " + e.getMessage() + "\n");
 					 logTextArea.setText(logBuilder.toString());
@@ -1133,7 +1823,7 @@ public void actionPerformed(ActionEvent e) {
 			  worker.execute();
     }
   }
-  
+
 @Override
 public void extensionUnloaded() {
 	// TODO Auto-generated method stub
