@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>Burp_WAS_extension</groupId>
   <artifactId>Burp_WAS_extension</artifactId>
-  <version>1.0.0</version>
+  <version>2.0.0</version>
   <build>
     <sourceDirectory>src</sourceDirectory>
     <resources>
