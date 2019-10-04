@@ -1496,6 +1496,10 @@ public void actionPerformed(ActionEvent e) {
     		     // Retrieve the return value of doInBackground.
     		    	response = get();
     		    	
+    		    	if (response == null || response.isEmpty()) {
+    		    		return;
+    		    	}
+    		    	
     		    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Send to Qualys WAS API Response = " + response + "\n");
     				logTextArea.setText(logBuilder.toString());
     		    	
@@ -1539,10 +1543,7 @@ public void actionPerformed(ActionEvent e) {
     				    }
     		    	
     		    	
-    		    } catch (InterruptedException e) {
-    		    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Failed exporting data to qualys; exception = " + e.getMessage() + "\n");
-    				logTextArea.setText(logBuilder.toString());
-    		    } catch (ExecutionException e) {
+    		    } catch (Exception e) {
     		    	logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Failed exporting data to qualys; exception = " + e.getMessage() + "\n");
     				logTextArea.setText(logBuilder.toString());
     		    }
