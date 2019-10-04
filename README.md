@@ -32,8 +32,9 @@ To validate a WAS finding:
 1. Go to Burp Repeater and right-click in the empty Request area.
 2. Select "Import Qualys WAS Finding".
 3. Choose "Enter Finding ID" if you know the WAS finding ID, otherwise choose "Select from a Web App's Open Findings". 
-4a. If you chose "Enter Finding ID", enter the finding ID in the text box (the longer UUID of the finding is preferred, although the numeric finding ID should work as well). Click "Fetch".
-4b. If you chose "Select from a Web App's Open Findings", you will see a list of web apps from WAS. Select a web app. The open vulnerabilities will be loaded into the Findings list. Note that only vulnerabilities are loaded, not "informational" QIDs. Select the finding you want to validate. If multiple payloads are present, you will also need to choose one of the payloads. 
+4. If you chose 
+	- "Enter Finding ID", enter the finding ID in the text box (the longer UUID of the finding is preferred, although the numeric finding ID should work as well). Click "Fetch". 
+	- "Select from a Web App's Open Findings", you will see a list of web apps from WAS. Select a web app. The open vulnerabilities will be loaded into the Findings list. Note that only vulnerabilities are loaded, not "informational" QIDs. Select the finding you want to validate. If multiple payloads are present, you will also need to choose one of the payloads. 
 5. Click "Import Request". (Note: If the WAS finding was detected prior to WAS Engine 7.0, some request headers may be missing or the format may need to be tweaked manually). 
 6. If required, manually update the session cookie or other authentication token in the request.
 7. Click "Send" and inspect the response to validate the finding.
