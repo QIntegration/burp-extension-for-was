@@ -20,6 +20,7 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -46,6 +47,7 @@ public class WASImport {
 	private String post_Url;
 	private boolean isPurgeIssues;
 	private boolean isCloseIssues;
+	private static String importApiPath = "/qps/rest/3.0/import/was/burp";
 	
 	private static String parsing_burpxml_success_code = "SUCCESS";
 	
@@ -72,13 +74,17 @@ public class WASImport {
 
 	      public void checkClientTrusted(X509Certificate[] arg0, String arg1)
 	        throws CertificateException
-	      {}
+	      {
+	    	  //leave blank
+	      }
 	      
 
 
 	      public void checkServerTrusted(X509Certificate[] arg0, String arg1)
 	        throws CertificateException
-	      {}
+	      {
+	    	  // leave blank
+	      }
 	    } };
 	    
 	    try
@@ -101,6 +107,14 @@ public class WASImport {
 	 public String getResponseCode(String response)
 	  {
 	    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance(); 
+	    try {
+			factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+		} catch (ParserConfigurationException ex) {
+			BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception ; " + ex.getMessage()+ "\n");
+	    	BurpExtender.logTextArea.setText(BurpExtender.logBuilder.toString());
+	    	return "";
+		}
+	    
 	    String response_message_code = "";
 	    try {
 	      DocumentBuilder builder = factory.newDocumentBuilder();
@@ -138,7 +152,7 @@ public class WASImport {
 		    try {
 		    	
 		    	IExtensionHelpers helpers = callbacks.getHelpers();
-		    	URL url = new URL(post_Url);
+		    	URL url = new URL(post_Url+importApiPath);
 		    	
 		    	ArrayList<String> headers = new ArrayList<String>();
 		    	headers.add("user: " + portal_username);
@@ -185,11 +199,19 @@ public class WASImport {
 	  {
 	    String postData = "";
 	    String fileName = xmlFile.getName();
+	    String exception_msg = " : Exception while constructing Qualys specific data for export; ";
 	    try
 	    {
 	      String burpXMLContent = new String(Files.readAllBytes(Paths.get(xmlFile.getAbsolutePath(), new String[0])));
 	      
 	      DocumentBuilderFactory dFact = DocumentBuilderFactory.newInstance();
+	      try {
+				dFact.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+	      } catch (ParserConfigurationException ex) {
+				BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception ; " + ex.getMessage()+ "\n");
+		    	BurpExtender.logTextArea.setText(BurpExtender.logBuilder.toString());
+		    	return "";
+	      }
 	      DocumentBuilder build = dFact.newDocumentBuilder();
 	      Document doc = build.newDocument();
 	      
@@ -222,6 +244,7 @@ public class WASImport {
 	      data.appendChild(burpXml_element);
 	      
 	      TransformerFactory tFact = TransformerFactory.newInstance();
+	      tFact.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
 	      Transformer trans = tFact.newTransformer();
 	      StringWriter writer = new StringWriter();
 	      StreamResult result = new StreamResult(writer);
@@ -233,14 +256,14 @@ public class WASImport {
 	    
 	    }
 	    catch (ParserConfigurationException ex) {
-	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception while constructing Qualys specific data for export; " + ex.getMessage() + "\n");
+	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + exception_msg + ex.getMessage() + "\n");
 	    	BurpExtender.logTextArea.setText(BurpExtender.logBuilder.toString());
 	    } catch (TransformerException ex) {
-	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception while constructing Qualys specific data for export; " + ex.getMessage() + "\n");
+	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + exception_msg + ex.getMessage() + "\n");
 	    	BurpExtender.logTextArea.setText(BurpExtender.logBuilder.toString());
 	    }
 	    catch (IOException e) {
-	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + " : Exception while constructing Qualys specific data for export; " + e.getMessage() + "\n");
+	    	BurpExtender.logBuilder.append(time_formatter.format(System.currentTimeMillis()) + exception_msg + e.getMessage() + "\n");
 	    	BurpExtender.logTextArea.setText(BurpExtender.logBuilder.toString());
 	    }
 	    return postData;

@@ -1,4 +1,4 @@
-package burp;
+package burp.model;
 
 public class WebAppItem implements Comparable<WebAppItem>{
   private String id;
