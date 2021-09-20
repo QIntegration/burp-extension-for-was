@@ -132,7 +132,7 @@ public class BurpExtender
   private int requestCount = 1;
   
   private static final String[] QUALYS_Portal_Name_List = { "US Platform 1", "US Platform 2", "US Platform 3", "US Platform 4", "EU Platform 1", 
-    "EU Platform 2", "Canada Platform", "India Platform", PCP };  
+    "EU Platform 2", "Canada Platform", "India Platform", "AE Platform 1", PCP };
   
   
   private static final String[] QUALYS_PORTAL_URL = { "https://qualysapi.qualys.com", 
@@ -143,6 +143,7 @@ public class BurpExtender
     "https://qualysapi.qg2.apps.qualys.eu",
     "https://qualysapi.qg1.apps.qualys.ca", 
     "https://qualysapi.qg1.apps.qualys.in",
+    "https://qualysapi.qg1.apps.qualys.ae",
     PCP
     };
   
