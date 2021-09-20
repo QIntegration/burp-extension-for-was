@@ -54,3 +54,6 @@ To send Burp issues to WAS:
 ** 2.0.0 30-Sep-2019
 - Added support for new Qualys shared platforms: Canada and US4
 - Added new feature to import a WAS finding into Repeater
+
+** 2.0.1 20-Sep-2021
+- Added support for new Qualys shared platforms: AE1
