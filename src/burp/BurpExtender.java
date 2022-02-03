@@ -804,7 +804,9 @@ public void actionPerformed(ActionEvent e) {
       findingIdPanel = new JPanel();
       findingIdLabel = new JLabel();
       findingIdRequestDetails = new JLabel();
+	  findingIdRequestDetails.putClientProperty("html.disable", null);
       webappsFindingRequestDetails = new JLabel();
+	  webappsFindingRequestDetails.putClientProperty("html.disable", null);
       findingIdTextField = new JTextField();
       findingIdRequest = new JLabel();
       findingIdRequestCombo = new JComboBox<String>();
